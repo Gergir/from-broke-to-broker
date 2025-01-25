@@ -1,3 +1,3 @@
-from .rate_schema import RateRequestSchema
+from .rate_schema import RateRequestSchema, RateResponseSchema, RatesOnlyResponseSchema
 
-__all__ = ['RateRequestSchema']
+__all__ = ['RateRequestSchema', 'RateResponseSchema', 'RatesOnlyResponseSchema']

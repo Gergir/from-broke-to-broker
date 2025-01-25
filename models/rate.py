@@ -11,5 +11,4 @@ class Rate(Base):
     update_date: Mapped[date] = mapped_column()
     currency: Mapped[str] = mapped_column()
     code: Mapped[str] = mapped_column()
-    country: Mapped[str] = mapped_column()
     mid: Mapped[float] = mapped_column()
