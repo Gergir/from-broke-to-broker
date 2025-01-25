@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, Query
 from requests import request
 from sqlalchemy.orm import Session
 
-from helpers import exceptions, queries
+from helpers import exceptions, queries, services
+from helpers.exceptions import TableEnum
 from models import Rate
 from schemas import RateResponseSchema, RatesOnlyResponseSchema
 from services.db_service import get_db
@@ -38,9 +39,48 @@ async def get_rates_for_requested_date(
 @router.post("/fetch")
 async def download_rates(
         db: Annotated[Session, Depends(get_db)],
-        table: str = Query(default="A"),
-        date_from: date = Query(default=date.today()),
-        date_to: date = Query(default=date.today()),
+        table: TableEnum = Query(..., description="Tables from NBP API", enum=["a", "b"]),
+        date_from: date = Query(default=date.today(), description="Date in YYYY-MM-DD format"),
+        date_to: date = Query(default=date.today(), description="Date in YYYY-MM-DD format"),
 ):
-    response = request("get", f"{NBP_API_URL}/{table}/{date_from}/{date_to}").json()
-    return response
+    if date_from > date_to:
+        exceptions.raise_400_bad_request("The beginning date cannot be older than the end date.")
+    if date_from > date.today() or date_to > date.today():
+        exceptions.raise_400_bad_request("Date cannot be in the future.")
+
+    all_valid_rates = []
+
+    # Split dates into periods, if request period is longer than 90 days
+    split_period = 90
+    if (date_to - date_from).days > split_period:
+        date_periods = services.split_fetch_period(date_from, date_to, split_period)
+
+        for date_period in date_periods:
+            url = f"{NBP_API_URL}/{table.value}/{date_period[0]}/{date_period[1]}"
+            data = services.fetch_rates(request("get", url))
+
+            for record in data:
+                rates_date = record.get("effectiveDate")
+                rates = record.get("rates")
+                valid_rates = [Rate(**rate, update_date=rates_date) for rate in rates
+                               if not queries.find_rates_with_specified_code_and_date(db, rates_date, rate.get("code"))]
+                all_valid_rates.extend(valid_rates)
+
+        for rate in all_valid_rates:
+            queries.add_rate_to_db(db, rate)
+        return {"message": f"Added {len(all_valid_rates)} rates"}
+    else:
+        url = f"{NBP_API_URL}/{table.value}/{date_from}/{date_to}"
+        data = services.fetch_rates(request("get", url))
+        all_valid_rates = []
+        for record in data:
+            rates_date = record.get("effectiveDate")
+            rates = record.get("rates")
+
+            valid_rates = [Rate(**rate, update_date=rates_date) for rate in rates
+                           if not queries.find_rates_with_specified_code_and_date(db, rates_date, rate.get("code"))]
+            all_valid_rates.extend(valid_rates)
+
+    for rate in all_valid_rates:
+        queries.add_rate_to_db(db, rate)
+    return {"message": f"Added {len(all_valid_rates)} rates"}
