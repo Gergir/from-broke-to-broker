@@ -1,14 +1,14 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Path
 from requests import request
 from sqlalchemy.orm import Session
 
 from helpers import exceptions, queries, services
 from helpers.exceptions import TableEnum
 from models import Rate
-from schemas import RateResponseSchema, RatesOnlyResponseSchema
+from schemas import RateResponseSchema, RatesOnlyResponseSchema, RateCurrencyResponseSchema
 from services.db_service import get_db
 
 router = APIRouter(prefix="/currencies", tags=["Rate"])
@@ -24,15 +24,32 @@ async def get_all_rates(db: Annotated[Session, Depends(get_db)]):
 
     return [{"update_date": update_date, "rates": currencies} for update_date, currencies in currencies_grouped_by_date]
 
+@router.get("/currency/{currency}")
+async def get_rates_for_specified_currency(
+        db: Annotated[Session, Depends(get_db)],
+        currency: str = Path(..., description="Currency code"),
+        date_from: date = Query(default=date.today(), description="Date in YYYY-MM-DD format"),
+        date_to: date = Query(default=date.today(), description="Date in YYYY-MM-DD format"),
+):
+    rates = queries.find_rates_for_specified_currency_and_date(db, currency, date_from, date_to)
+    print(rates)
+    if not rates:
+        exceptions.raise_404_not_found("No rates found for requested currency. Try to download them first.")
 
-@router.get("/{date}", response_model=list[RateResponseSchema])
+    return [{"date": update_date, "mid": mid } for update_date, mid in rates]
+
+
+@router.get("/{request_date}", response_model=list[RateResponseSchema])
 async def get_rates_for_requested_date(
         db: Annotated[Session, Depends(get_db)],
-        request_date: str = Query(default=date.today(), description="Date in YYYY-MM-DD format")
+        request_date: date = Path(..., description="Date in YYYY-MM-DD format")
 ):
     rates = queries.find_all_rates_for_specified_date(db, request_date)
-    if not db.query(Rate):
+    if request_date > date.today():
+        exceptions.raise_400_bad_request("Date cannot be in the future.")
+    if not queries.find_all_rates_for_specified_date(db, request_date):
         exceptions.raise_404_not_found("No rates found for requested date. Try to download them first.")
+
     return rates
 
 
@@ -42,6 +59,7 @@ async def download_rates(
         table: TableEnum = Query(..., description="Tables from NBP API", enum=["a", "b"]),
         date_from: date = Query(default=date.today(), description="Date in YYYY-MM-DD format"),
         date_to: date = Query(default=date.today(), description="Date in YYYY-MM-DD format"),
+        currency: str = Query(None, description="Currency code")
 ):
     if date_from > date_to:
         exceptions.raise_400_bad_request("The beginning date cannot be older than the end date.")
@@ -78,9 +96,11 @@ async def download_rates(
             rates = record.get("rates")
 
             valid_rates = [Rate(**rate, update_date=rates_date) for rate in rates
-                           if not queries.find_rates_with_specified_code_and_date(db, rates_date, rate.get("code"))]
+                           if not queries.find_rates_with_specified_code_and_date(db, rates_date, rate.get("currency"))]
             all_valid_rates.extend(valid_rates)
 
+    if not all_valid_rates:
+        exceptions.raise_400_bad_request("All rates for specified period are already in the database.")
     for rate in all_valid_rates:
         queries.add_rate_to_db(db, rate)
     return {"message": f"Added {len(all_valid_rates)} rates"}

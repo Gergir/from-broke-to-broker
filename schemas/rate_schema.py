@@ -16,7 +16,7 @@ class RateResponseSchema(BaseModel):
     code: str
     mid: float
 
-    class Config:
+    class ConfigDict:
         from_attributes = True
 
 
@@ -24,5 +24,12 @@ class RatesOnlyResponseSchema(BaseModel):
     update_date: date
     rates: list[str]
 
-    class Config:
+    class ConfigDict:
+        from_attributes = True
+
+class RateCurrencyResponseSchema(BaseModel):
+    update_date: date
+    mid: float
+
+    class ConfigDict:
         from_attributes = True
