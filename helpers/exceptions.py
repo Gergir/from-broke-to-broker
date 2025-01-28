@@ -1,11 +1,4 @@
-from enum import Enum
-
 from fastapi import HTTPException
-
-
-class TableEnum(str, Enum):
-    a = "a"
-    b = "b"
 
 
 def raise_404_not_found(error: str = "Entity not found") -> None:

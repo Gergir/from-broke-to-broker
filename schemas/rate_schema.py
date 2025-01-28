@@ -1,13 +1,6 @@
 from datetime import date
 
-from pydantic import BaseModel, Field
-
-
-class RateRequestSchema(BaseModel):
-    update_date: date = Field()
-    currency: str = Field()
-    code: str = Field(min_length=3, max_length=3)
-    mid: float = Field(gt=0)
+from pydantic import BaseModel
 
 
 class RateResponseSchema(BaseModel):
@@ -16,13 +9,13 @@ class RateResponseSchema(BaseModel):
     code: str
     mid: float
 
-    class Config:
+    class ConfigDict:
         from_attributes = True
 
 
-class RatesOnlyResponseSchema(BaseModel):
-    update_date: date
-    rates: list[str]
+class RateResponseOnlyCurrencies(BaseModel):
+    currency: str
+    code: str
 
-    class Config:
+    class ConfigDict:
         from_attributes = True
