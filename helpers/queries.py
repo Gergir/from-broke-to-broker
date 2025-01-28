@@ -6,30 +6,31 @@ from models import Rate
 
 
 def get_currencies(db: Session) -> list[dict[str, str]]:
+    """Get all currencies from the database."""
     currencies = db.query(Rate.currency, Rate.code).distinct().order_by(Rate.currency).all()
     return [{"currency": currency, "code": code} for currency, code in currencies]
 
 
 def get_rates(db: Session, date_from: date, date_to: date) -> set[tuple[date, str]]:
+    """Get all existing rates, return a set of tuples with date and currency code for easy comparison."""
     existing_rates = db.query(Rate.update_date, Rate.code).filter(Rate.update_date.between(date_from, date_to)).all()
     return {(rate.update_date, rate.code) for rate in existing_rates}
 
 
 def get_code_rates(db: Session, code: str, date_from: date, date_to: date) -> set[tuple[date, float]]:
+    """
+    Get all existing rates for a specific currency code, return a set of tuples with date, mid for easy comparison.
+    Mid currently not used, but it's here for possible future use.
+    """
     existing_rates = db.query(Rate.update_date, Rate.mid).filter(
         Rate.update_date.between(date_from, date_to), Rate.code == code
     ).all()
     return {(rate.update_date, rate.mid) for rate in existing_rates}
 
 
-def get_rates_for_date(db: Session, request_date: date, code: str | None = None) -> list:
-    if code:
-        return db.query(Rate).filter(Rate.update_date == request_date, Rate.code == code).all()
-    return db.query(Rate).filter(Rate.update_date == request_date).all()
-
-
 def get_rates_for_period(db: Session, start_date: date, end_date: date, code: str | None = None) -> tuple[
     list[Rate], date, date]:
+    """Get rates for a specific period, optionally filtered by currency code."""
     query = db.query(Rate)
 
     if start_date == end_date:

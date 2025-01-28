@@ -1,106 +1,161 @@
 from datetime import date
 from typing import Annotated
 
+from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Depends, Query, Path
 from requests import request
 from sqlalchemy.orm import Session
 
 from helpers import exceptions, queries, services
-from helpers.exceptions import TableEnum
-from models import Rate
-from schemas import RateResponseSchema, RatesOnlyResponseSchema, RateCurrencyResponseSchema
+from schemas import RateResponseSchema, RateResponseOnlyCurrencies
 from services.db_service import get_db
+
+NBP_API_TABLES_URL = "https://api.nbp.pl/api/exchangerates/tables/a"
+NBP_API_RATES_URL = "https://api.nbp.pl/api/exchangerates/rates/a"
+REQUEST_LIMIT_PERIOD = 366
+TABLE_SPLIT_PERIOD = 90
 
 router = APIRouter(prefix="/currencies", tags=["Rate"])
 
-NBP_API_URL = "https://api.nbp.pl/api/exchangerates/tables"
 
-
-@router.get("/", response_model=list[RatesOnlyResponseSchema])
-async def get_all_rates(db: Annotated[Session, Depends(get_db)]):
-    currencies_grouped_by_date = queries.find_all_currencies_for_all_dates(db)
-    if not currencies_grouped_by_date:
+@router.get("/", response_model=list[RateResponseOnlyCurrencies])
+async def get_all_currencies(db: Annotated[Session, Depends(get_db)]):
+    currencies = queries.get_currencies(db)
+    if not currencies:
         exceptions.raise_404_not_found("No currencies found. Try to fetch them first.")
-
-    return [{"update_date": update_date, "rates": currencies} for update_date, currencies in currencies_grouped_by_date]
-
-@router.get("/currency/{currency}")
-async def get_rates_for_specified_currency(
-        db: Annotated[Session, Depends(get_db)],
-        currency: str = Path(..., description="Currency code"),
-        date_from: date = Query(default=date.today(), description="Date in YYYY-MM-DD format"),
-        date_to: date = Query(default=date.today(), description="Date in YYYY-MM-DD format"),
-):
-    rates = queries.find_rates_for_specified_currency_and_date(db, currency, date_from, date_to)
-    print(rates)
-    if not rates:
-        exceptions.raise_404_not_found("No rates found for requested currency. Try to download them first.")
-
-    return [{"date": update_date, "mid": mid } for update_date, mid in rates]
+    return currencies
 
 
 @router.get("/{request_date}", response_model=list[RateResponseSchema])
-async def get_rates_for_requested_date(
+async def get_rates(
         db: Annotated[Session, Depends(get_db)],
-        request_date: date = Path(..., description="Date in YYYY-MM-DD format")
+        request_date: str = Path(..., description="Date in YYYY, YYYY-MM, YYYY-QQ or YYYY-MM-DD format"),
+        code: Annotated[str | None, Query(description="Currency code (e.g., USD, EUR)")] = None
 ):
-    rates = queries.find_all_rates_for_specified_date(db, request_date)
-    if request_date > date.today():
+    today = date.today()
+    start_date = end_date = None
+
+    try:  # Parse date parameter
+        if len(request_date) == 4:  # Year only: YYYY
+            year = int(request_date)
+            start_date = date(year, 1, 1)
+            end_date = date(year, 12, 31)
+            if end_date > today:
+                end_date = today
+        elif 'Q' in request_date:  # Quarter: YYYY-QQ
+
+            year, quarter = request_date.split('-Q')
+            quarter = int(quarter)
+            start_date = date(int(year), 3 * quarter - 2, 1)
+            end_date = start_date + relativedelta(months=3, days=-1)
+            if end_date > today:
+                end_date = today
+
+        elif len(request_date.split('-')) == 2:  # Month: YYYY-MM
+            year, month = map(int, request_date.split('-'))
+            start_date = date(year, month, 1)
+            end_date = start_date + relativedelta(months=1, days=-1)
+            if end_date > today:
+                end_date = today
+
+        else:  # Full date: YYYY-MM-DD
+            start_date = end_date = date.fromisoformat(request_date)
+
+    except ValueError:
+        exceptions.raise_400_bad_request(
+            f"Invalid date format. "
+            f"Use YYYY for year, YYYY-MM for month, YYYY-Q1/Q2/Q3/Q4 for quarter, or YYYY-MM-DD for specific date"
+        )
+
+    if start_date > today or end_date > today:
         exceptions.raise_400_bad_request("Date cannot be in the future.")
-    if not queries.find_all_rates_for_specified_date(db, request_date):
-        exceptions.raise_404_not_found("No rates found for requested date. Try to download them first.")
+
+    if code is not None:
+        code = code.upper()
+
+    rates, start_date, end_date = queries.get_rates_for_period(db, start_date, end_date, code)
+    if not rates and code:
+        exceptions.raise_404_not_found(f"No {code} rates found for the requested period. Try to download them first.")
+    elif not rates:
+        exceptions.raise_404_not_found("No rates found for the requested period. Try to download them first.")
 
     return rates
 
 
-@router.post("/fetch")
-async def download_rates(
+@router.post("/fetch/tables")
+async def download_rates_for_table(
         db: Annotated[Session, Depends(get_db)],
-        table: TableEnum = Query(..., description="Tables from NBP API", enum=["a", "b"]),
-        date_from: date = Query(default=date.today(), description="Date in YYYY-MM-DD format"),
-        date_to: date = Query(default=date.today(), description="Date in YYYY-MM-DD format"),
-        currency: str = Query(None, description="Currency code")
+        date_from: Annotated[date | None, Query(description="Date in YYYY-MM-DD format")] = None,
+        date_to: Annotated[date | None, Query(description="Date in YYYY-MM-DD format")] = None
 ):
+    if (date_from is None) != (date_to is None):
+        exceptions.raise_400_bad_request("Both or none dates are required.")
+
+    if not date_from and not date_to:
+        """If no dates are provided, set them to the last available date"""
+        response = request("get", url=f"{NBP_API_TABLES_URL}/last").json()
+        date_from = date_to = date.fromisoformat(response[0].get("effectiveDate"))
+
     if date_from > date_to:
         exceptions.raise_400_bad_request("The beginning date cannot be older than the end date.")
+
     if date_from > date.today() or date_to > date.today():
         exceptions.raise_400_bad_request("Date cannot be in the future.")
 
-    all_valid_rates = []
+    if (date_to - date_from).days > REQUEST_LIMIT_PERIOD:
+        exceptions.raise_400_bad_request("The period cannot be longer than 366 days.")
 
-    # Split dates into periods, if request period is longer than 90 days
-    split_period = 90
-    if (date_to - date_from).days > split_period:
-        date_periods = services.split_fetch_period(date_from, date_to, split_period)
+    new_rates = []
+    urls = []
+    existing_rates = queries.get_rates(db, date_from, date_to)
 
+    # Split dates into periods, if request period is longer than 90 days (to avoid limitation of NBP API)
+    if (date_to - date_from).days > TABLE_SPLIT_PERIOD:
+        date_periods = services.split_fetch_period(date_from, date_to, TABLE_SPLIT_PERIOD)
         for date_period in date_periods:
-            url = f"{NBP_API_URL}/{table.value}/{date_period[0]}/{date_period[1]}"
-            data = services.fetch_rates(request("get", url))
-
-            for record in data:
-                rates_date = record.get("effectiveDate")
-                rates = record.get("rates")
-                valid_rates = [Rate(**rate, update_date=rates_date) for rate in rates
-                               if not queries.find_rates_with_specified_code_and_date(db, rates_date, rate.get("code"))]
-                all_valid_rates.extend(valid_rates)
-
-        for rate in all_valid_rates:
-            queries.add_rate_to_db(db, rate)
-        return {"message": f"Added {len(all_valid_rates)} rates"}
+            urls.append(f"{NBP_API_TABLES_URL}/{date_period[0]}/{date_period[1]}")
     else:
-        url = f"{NBP_API_URL}/{table.value}/{date_from}/{date_to}"
-        data = services.fetch_rates(request("get", url))
-        all_valid_rates = []
-        for record in data:
-            rates_date = record.get("effectiveDate")
-            rates = record.get("rates")
+        urls.append(f"{NBP_API_TABLES_URL}/{date_from}/{date_to}")
 
-            valid_rates = [Rate(**rate, update_date=rates_date) for rate in rates
-                           if not queries.find_rates_with_specified_code_and_date(db, rates_date, rate.get("currency"))]
-            all_valid_rates.extend(valid_rates)
+    for url in urls:
+        new_rates.extend(services.get_new_rates(request("get", url), existing_rates))
 
-    if not all_valid_rates:
+    if len(new_rates) == 0:
         exceptions.raise_400_bad_request("All rates for specified period are already in the database.")
-    for rate in all_valid_rates:
-        queries.add_rate_to_db(db, rate)
-    return {"message": f"Added {len(all_valid_rates)} rates"}
+    queries.add_rates_to_db(db, new_rates)
+    return {"message": f"Added {len(new_rates)} rates"}
+
+
+@router.post("/fetch/rates")
+async def download_rates_for_currency(
+        db: Annotated[Session, Depends(get_db)],
+        code: str = Query(..., description="Currency code"),
+        date_from: Annotated[date | None, Query(description="Date in YYYY-MM-DD format")] = None,
+        date_to: Annotated[date | None, Query(description="Date in YYYY-MM-DD format")] = None
+):
+    if (date_from is None) != (date_to is None):
+        exceptions.raise_400_bad_request("Both or none dates are required.")
+
+    if not date_from and not date_to:
+        """If no dates are provided, set them to the last available date"""
+        url = f"{NBP_API_RATES_URL}/{code}/last"
+        date_from = date_to = date.fromisoformat(request("get", url).json().get("rates")[0].get("effectiveDate"))
+
+    if date_from > date_to:
+        exceptions.raise_400_bad_request("The beginning date cannot be older than the end date.")
+
+    if date_from > date.today() or date_to > date.today():
+        exceptions.raise_400_bad_request("Date cannot be in the future.")
+
+    if (date_to - date_from).days > REQUEST_LIMIT_PERIOD:
+        exceptions.raise_400_bad_request("The period cannot be longer than 366 days.")
+
+    code = code.upper()
+    existing_rates = queries.get_code_rates(db, code, date_from, date_to)
+    url = f"{NBP_API_RATES_URL}/{code}/{date_from}/{date_to}"
+    new_rates = services.get_new_code_rates(request("get", url), code, existing_rates)
+
+    if len(new_rates) == 0:
+        exceptions.raise_400_bad_request(f"All {code} rates for specified period are already in the database.")
+    queries.add_rates_to_db(db, new_rates)
+    return {"message": f"Added {len(new_rates)} rates"}
