@@ -1,45 +1,51 @@
 from datetime import date
 
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import func
 
 from models import Rate
 
 
-def find_all_currencies_for_all_dates(db: Session) -> list:
-    """
-    SQL COMMAND:
-    SELECT rates.update_date AS rates_update_date, array_agg(rates.currency) AS currencies FROM rates
-    GROUP BY rates.update_date ORDER BY rates.update_date
-    """
-    return db.query(Rate.update_date, func.array_agg(Rate.currency).label("currencies")).group_by(
-        Rate.update_date).order_by(Rate.update_date).all()
+def get_currencies(db: Session) -> list[dict[str, str]]:
+    currencies = db.query(Rate.currency, Rate.code).distinct().order_by(Rate.currency).all()
+    return [{"currency": currency, "code": code} for currency, code in currencies]
 
 
-def find_all_rates_for_specified_date(db: Session, request_date) -> list:
+def get_rates(db: Session, date_from: date, date_to: date) -> set[tuple[date, str]]:
+    existing_rates = db.query(Rate.update_date, Rate.code).filter(Rate.update_date.between(date_from, date_to)).all()
+    return {(rate.update_date, rate.code) for rate in existing_rates}
+
+
+def get_code_rates(db: Session, code: str, date_from: date, date_to: date) -> set[tuple[date, float]]:
+    existing_rates = db.query(Rate.update_date, Rate.mid).filter(
+        Rate.update_date.between(date_from, date_to), Rate.code == code
+    ).all()
+    return {(rate.update_date, rate.mid) for rate in existing_rates}
+
+
+def get_rates_for_date(db: Session, request_date: date, code: str | None = None) -> list:
+    if code:
+        return db.query(Rate).filter(Rate.update_date == request_date, Rate.code == code).all()
     return db.query(Rate).filter(Rate.update_date == request_date).all()
 
 
-def find_rates_with_specified_code_and_date(db: Session, rates_date, currency) -> Rate | None:
-    return db.query(Rate).filter(Rate.update_date == rates_date, Rate.currency == currency).first()
+def get_rates_for_period(db: Session, start_date: date, end_date: date, code: str | None = None) -> tuple[
+    list[Rate], date, date]:
+    query = db.query(Rate)
+
+    if start_date == end_date:
+        query = query.filter(Rate.update_date == start_date)
+    else:
+        query = query.filter(Rate.update_date.between(start_date, end_date))
+
+    if code:
+        query = query.filter(Rate.code == code)
+
+    results = query.order_by(Rate.update_date).all()
+
+    return results, start_date, end_date
 
 
-def find_rates_for_specified_currency_and_date(
-        db: Session,
-        currency: str,
-        date_from: date,
-        date_to: date
-):
-    return (
-        db.query(Rate.update_date, Rate.mid)
-        .filter(
-            Rate.currency == currency,
-            Rate.update_date.between(date_from, date_to)
-        )
-        .order_by(Rate.update_date)
-        .all())
-
-
-def add_rate_to_db(db: Session, rate: Rate) -> None:
-    db.add(rate)
+def add_rates_to_db(db: Session, rates: list[Rate]) -> None:
+    """Add multiple rates to the database in a single transaction."""
+    db.add_all(rates)
     db.commit()
