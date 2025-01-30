@@ -1,14 +1,24 @@
 services:
+  # PRODUCTION ENVIRONMENT
+  app-frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    ports:
+      - "4200:4200"
+    depends_on:
+      - app
+
   app:
     build:
-      context: .
+      context: backend
       dockerfile: Dockerfile
     volumes:
-      - .:/app
+      - ./backend:/app
     ports:
       - "8000:8080"
     env_file:
-      - .env  # Load database credentials from .env file
+      - backend/.env  # Load database credentials from .env file
     depends_on:
       - db
 
@@ -17,21 +27,31 @@ services:
     ports:
       - "5432:5432"
     env_file:
-      - .env  # Load database credentials from .env file
+      - backend/.env  # Load database credentials from .env file
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
 
+# TEST ENVIRONMENT
+  test-app-frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    ports:
+      - "4201:4200"
+    depends_on:
+      - test-app
+
   test-app:
     build:
-      context: .
+      context: backend
       dockerfile: Dockerfile
     volumes:
-      - .:/app
+      - ./backend:/app
     ports:
       - "8001:8080"
     env_file:
-      - .env.test  # Load database credentials from .env.test file
+      - backend/.env.test  # Load database credentials from .env.test file
     depends_on:
       - test-db
 
@@ -40,7 +60,7 @@ services:
     ports:
       - "5433:5432"
     env_file:
-      - .env.test  # Load database credentials from .env.test file
+      - backend/.env.test  # Load database credentials from .env.test file
 
 
 volumes:
