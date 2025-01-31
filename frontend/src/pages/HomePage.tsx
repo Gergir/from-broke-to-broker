@@ -3,6 +3,7 @@ import axios from 'axios';
 import DateSelector from '../components/DateSelector';
 import CurrencySelector from '../components/CurrencySelector';
 import RatesTable from '../components/RatesTable';
+import CurrencyChart from '../components/CurrencyChart';
 import {endOfMonth, endOfQuarter, endOfYear, format, parseISO} from 'date-fns';
 
 
@@ -30,6 +31,7 @@ const HomePage = () => {
     const [backendAvailable, setBackendAvailable] = useState(true);
     const [hasInitialized, setHasInitialized] = useState(false);
     const [showRates, setShowRates] = useState(false);
+    const [showChart, setShowChart] = useState(false);
 
     useEffect(() => {
         const checkBackend = async () => {
@@ -61,6 +63,7 @@ const HomePage = () => {
     const handleError = (error: any, defaultMessage: string) => {
         setRates([]);
         setShowRates(false);
+        setShowChart(false);
         if (axios.isAxiosError(error)) {
             setError(error.response?.data?.detail || error.message || defaultMessage);
         } else {
@@ -84,6 +87,7 @@ const HomePage = () => {
 
     const getRates = async () => {
         setLoading(true);
+        setShowChart(false);
         setError('');
         try {
             let requestDate = '';
@@ -113,6 +117,10 @@ const HomePage = () => {
                 new Date(b.update_date).getTime() - new Date(a.update_date).getTime()
             ));
             setShowRates(true);
+            if (selectedCurrency && response.data.length > 0 && periodType !== 'day') {
+                setShowChart(true);
+            }
+
         } catch (err) {
             handleError(err, 'Failed to fetch rates. Please try again.');
         } finally {
@@ -122,6 +130,7 @@ const HomePage = () => {
 
     const fetchRates = async () => {
         setLoading(true);
+        setShowChart(false);
         setError('');
         try {
             const dateFrom = parseISO(dateValue);
@@ -229,6 +238,15 @@ const HomePage = () => {
                             </div>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {showChart && (
+                <div className="chart-container">
+                    <CurrencyChart
+                        rates={rates}
+                        periodType={periodType}
+                    />
                 </div>
             )}
 

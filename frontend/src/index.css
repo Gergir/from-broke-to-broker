@@ -72,7 +72,7 @@ button:disabled {
 }
 
 
-/* Calendar Specific Styling */
+/* calendar */
 .react-datepicker {
     height: 300px;
     width: 400px;
@@ -227,3 +227,15 @@ tbody tr:last-child {
     padding-bottom: 25px;
 }
 
+
+.chart-container {
+    background: white;
+    padding: 1rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    margin: 2rem 0;
+}
+
+canvas {
+    max-height: 400px;
+}
