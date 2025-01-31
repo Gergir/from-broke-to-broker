@@ -1,15 +1,19 @@
 services:
   # PRODUCTION ENVIRONMENT
   app-frontend:
+    container_name: app-frontend
     build:
       context: frontend
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    environment:
+      - VITE_API_URL=http://app:8080
     depends_on:
       - app
 
   app:
+    container_name: app
     build:
       context: backend
       dockerfile: Dockerfile
@@ -34,22 +38,26 @@ services:
 
 # TEST ENVIRONMENT
   test-app-frontend:
+    container_name: test-app-frontend
     build:
       context: frontend
       dockerfile: Dockerfile
     ports:
-      - "3001:3000"
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://test-app:8080
     depends_on:
       - test-app
 
   test-app:
+    container_name: test-app
     build:
       context: backend
       dockerfile: Dockerfile
     volumes:
       - ./backend:/app
     ports:
-      - "8001:8080"
+      - "8000:8080"
     env_file:
       - backend/.env.test  # Load database credentials from .env.test file
     depends_on:
