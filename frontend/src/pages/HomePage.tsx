@@ -5,6 +5,7 @@ import CurrencySelector from '../components/CurrencySelector';
 import RatesTable from '../components/RatesTable';
 import {endOfMonth, endOfQuarter, endOfYear, format, parseISO} from 'date-fns';
 
+
 interface Rate {
     update_date: string;
     currency: string;
@@ -17,6 +18,7 @@ interface Currency {
     code: string;
 }
 
+const today = new Date();
 const HomePage = () => {
     const [dateValue, setDateValue] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [periodType, setPeriodType] = useState<'day' | 'month' | 'quarter' | 'year'>('day');
@@ -104,7 +106,7 @@ const HomePage = () => {
             }
 
             const response = await axios.get(`/currencies/${requestDate}`, {
-                params: { code: selectedCurrency || undefined }
+                params: {code: selectedCurrency || undefined}
             });
 
             setRates(response.data.sort((a: Rate, b: Rate) =>
@@ -127,26 +129,50 @@ const HomePage = () => {
 
             switch (periodType) {
                 case 'year':
-                    dateTo = endOfYear(dateFrom);
+                    if (endOfYear(dateFrom) > today && dateFrom < today) {
+                        dateTo = today;
+                    } else {
+                        dateTo = endOfYear(dateFrom);
+                    }
                     break;
                 case 'quarter':
-                    dateTo = endOfQuarter(dateFrom);
+                    if (endOfQuarter(dateFrom) > today && dateFrom < today) {
+                        dateTo = today;
+                    } else {
+                        dateTo = endOfQuarter(dateFrom);
+
+                    }
+
                     break;
                 case 'month':
-                    dateTo = endOfMonth(dateFrom);
+                    if (endOfMonth(dateFrom) > today && dateFrom < today) {
+                        dateTo = today;
+                    } else {
+                        dateTo = endOfMonth(dateFrom);
+                    }
+
                     break;
                 case 'day':
                     dateTo = dateFrom;
                     break;
             }
 
-            const endpoint = '/currencies/fetch/tables';
-            await axios.post(endpoint, null, {
+             if (selectedCurrency) {
+            await axios.post('/currencies/fetch/rates', null, {
                 params: {
+                    code: selectedCurrency,
                     date_from: format(dateFrom, 'yyyy-MM-dd'),
-                    date_to: format(dateTo, 'yyyy-MM-dd')
+                    date_to: format(dateTo, 'yyyy-MM-dd'),
                 }
             });
+        } else {
+            await axios.post('/currencies/fetch/tables', null, {
+                params: {
+                    date_from: format(dateFrom, 'yyyy-MM-dd'),
+                    date_to: format(dateTo, 'yyyy-MM-dd'),
+                }
+            });
+        }
 
             await getRates();
         } catch (err) {
@@ -163,7 +189,7 @@ const HomePage = () => {
             <h1>Currency Rates</h1>
 
             {!backendAvailable && (
-                <div className="error" style={{ color: 'red', fontWeight: 'bold' }}>
+                <div className="error" style={{color: 'red', fontWeight: 'bold'}}>
                     Backend connection failed! Make sure the API server is running on port 8000
                 </div>
             )}
@@ -205,7 +231,7 @@ const HomePage = () => {
             {loading && <div className="loading">Loading data...</div>}
 
             {showRates && rates.length > 0 ? (
-                <RatesTable rates={rates} />
+                <RatesTable rates={rates}/>
             ) : (
                 showRates && <div className="empty-state">No rates found for selected period</div>
             )}
