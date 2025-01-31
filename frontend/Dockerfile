@@ -1,9 +1,9 @@
-FROM node:alpine
-WORKDIR /usr/src/app
-COPY . /usr/src/app
-RUN npm install -g @angular/cli
+FROM node:18-alpine
+WORKDIR /app
+COPY package.json ./
+COPY package-lock.json ./
 RUN npm install
+COPY . .
+EXPOSE 3000
 
-EXPOSE 4200
-
-CMD ["ng", "serve", "--host", "0.0.0.0"]
+CMD ["npm", "start"]
