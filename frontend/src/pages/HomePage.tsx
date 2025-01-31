@@ -1,18 +1,9 @@
-import {useState, useEffect} from 'react';
+import {useEffect, useState} from 'react';
 import axios from 'axios';
 import DateSelector from '../components/DateSelector';
 import CurrencySelector from '../components/CurrencySelector';
 import RatesTable from '../components/RatesTable';
-import {
-    format,
-    parseISO,
-    startOfYear,
-    endOfYear,
-    startOfQuarter,
-    endOfQuarter,
-    startOfMonth,
-    endOfMonth
-} from 'date-fns';
+import {endOfMonth, endOfQuarter, endOfYear, format, parseISO} from 'date-fns';
 
 interface Rate {
     update_date: string;
@@ -27,26 +18,25 @@ interface Currency {
 }
 
 const HomePage = () => {
-    const [periodType, setPeriodType] = useState('day');
     const [dateValue, setDateValue] = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [periodType, setPeriodType] = useState<'day' | 'month' | 'quarter' | 'year'>('day');
     const [currencies, setCurrencies] = useState<Currency[]>([]);
     const [selectedCurrency, setSelectedCurrency] = useState('');
     const [rates, setRates] = useState<Rate[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [backendAvailable, setBackendAvailable] = useState(true);
-    const [lastFetchType, setLastFetchType] = useState<'table' | 'rate' | null>(null);
+    const [hasInitialized, setHasInitialized] = useState(false);
+    const [showRates, setShowRates] = useState(false);
 
     useEffect(() => {
         const checkBackend = async () => {
             try {
-                await axios.get('/currencies/', {timeout: 2000});
+                await axios.get('/currencies/');
                 setBackendAvailable(true);
-                await fetchCurrencies();
-            } catch (error) {
-                    const message = error.response.data?.detail || error.response.data?.message || error.message;
-
-                if (message === 'No currencies found. Try to fetch them first.') {
+                fetchCurrencies();
+            } catch (error: any) {
+                if (error.response?.status === 404) {
                     setBackendAvailable(true);
                 } else {
                     setBackendAvailable(false);
@@ -54,28 +44,21 @@ const HomePage = () => {
                 }
             }
         };
-
         checkBackend();
     }, []);
-
 
     const fetchCurrencies = async () => {
         try {
             const response = await axios.get('/currencies/');
             setCurrencies(response.data);
-
-            if (response.data.length === 0) {
-                setError('No currencies available. Please initialize rates first.');
-            } else {
-                setError(''); // Clear error if currencies are available
-            }
         } catch (err) {
-            handleError(err, err.message);
+            handleError(err, 'Failed to fetch currencies');
         }
     };
 
-    const handleError = (error: unknown, defaultMessage: string) => {
+    const handleError = (error: any, defaultMessage: string) => {
         setRates([]);
+        setShowRates(false);
         if (axios.isAxiosError(error)) {
             setError(error.response?.data?.detail || error.message || defaultMessage);
         } else {
@@ -88,10 +71,10 @@ const HomePage = () => {
         setError('');
         try {
             await axios.post('/currencies/fetch/tables');
-            setLastFetchType('table');
-            await Promise.all([fetchCurrencies(), getRates()]);
+            setHasInitialized(true);
+            await fetchCurrencies();
         } catch (err) {
-            handleError(err, 'Failed to initialize rates');
+            handleError(err, 'Failed to initialize rates. Please check backend connection.');
         } finally {
             setLoading(false);
         }
@@ -102,32 +85,34 @@ const HomePage = () => {
         setError('');
         try {
             let requestDate = '';
-            const currentDate = new Date(dateValue);
+            const date = parseISO(dateValue);
 
             switch (periodType) {
                 case 'year':
-                    requestDate = format(currentDate, 'yyyy');
+                    requestDate = format(date, 'yyyy');
                     break;
                 case 'quarter':
-                    requestDate = `${format(currentDate, 'yyyy')}-Q${Math.ceil((currentDate.getMonth() + 1) / 3)}`;
+                    const quarter = Math.ceil((date.getMonth() + 1) / 3);
+                    requestDate = `${format(date, 'yyyy')}-Q${quarter}`;
                     break;
                 case 'month':
-                    requestDate = format(currentDate, 'yyyy-MM');
+                    requestDate = format(date, 'yyyy-MM');
                     break;
+                case 'day':
                 default:
-                    requestDate = format(currentDate, 'yyyy-MM-dd');
+                    requestDate = format(date, 'yyyy-MM-dd');
             }
 
             const response = await axios.get(`/currencies/${requestDate}`, {
-                params: {code: selectedCurrency || undefined}
+                params: { code: selectedCurrency || undefined }
             });
 
-            const sortedRates = response.data.sort((a: Rate, b: Rate) =>
+            setRates(response.data.sort((a: Rate, b: Rate) =>
                 new Date(b.update_date).getTime() - new Date(a.update_date).getTime()
-            );
-            setRates(sortedRates);
+            ));
+            setShowRates(true);
         } catch (err) {
-            handleError(err, 'Failed to fetch rates');
+            handleError(err, 'Failed to fetch rates. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -150,18 +135,19 @@ const HomePage = () => {
                 case 'month':
                     dateTo = endOfMonth(dateFrom);
                     break;
+                case 'day':
+                    dateTo = dateFrom;
+                    break;
             }
 
-            const endpoint = selectedCurrency ? '/currencies/fetch/rates' : '/currencies/fetch/tables';
+            const endpoint = '/currencies/fetch/tables';
             await axios.post(endpoint, null, {
                 params: {
-                    code: selectedCurrency,
                     date_from: format(dateFrom, 'yyyy-MM-dd'),
                     date_to: format(dateTo, 'yyyy-MM-dd')
                 }
             });
 
-            setLastFetchType(selectedCurrency ? 'rate' : 'table');
             await getRates();
         } catch (err) {
             handleError(err, 'Failed to fetch rates');
@@ -170,69 +156,65 @@ const HomePage = () => {
         }
     };
 
+    const showInitButton = currencies.length === 0 && !hasInitialized;
+
     return (
         <div className="container">
             <h1>Currency Rates</h1>
 
             {!backendAvailable && (
-                <div className="error" style={{color: 'red', fontWeight: 'bold'}}>
+                <div className="error" style={{ color: 'red', fontWeight: 'bold' }}>
                     Backend connection failed! Make sure the API server is running on port 8000
                 </div>
             )}
 
-
-            {!rates.length && !error && currencies.length === 0 && backendAvailable && (
+            {showInitButton && (
                 <div className="empty-state">
-                    <button onClick={initializeRates} className="init-button">
-                        Initialize Rates
+                    <button onClick={initializeRates} className="init-button" disabled={loading}>
+                        {loading ? 'Initializing...' : 'Initialize Rates'}
                     </button>
                 </div>
             )}
 
-            <div className="controls">
-                <DateSelector
-                    periodType={periodType}
-                    setPeriodType={setPeriodType}
-                    dateValue={dateValue}
-                    setDateValue={setDateValue}
-                />
+            {!showInitButton && (
+                <div className="controls">
+                    <DateSelector
+                        dateValue={dateValue}
+                        setDateValue={setDateValue}
+                        periodType={periodType}
+                        setPeriodType={setPeriodType}
+                    />
 
-                <CurrencySelector
-                    currencies={currencies}
-                    selectedCurrency={selectedCurrency}
-                    setSelectedCurrency={setSelectedCurrency}
-                />
+                    <CurrencySelector
+                        currencies={currencies}
+                        selectedCurrency={selectedCurrency}
+                        setSelectedCurrency={setSelectedCurrency}
+                    />
 
-                <button onClick={getRates} disabled={loading || !backendAvailable}>
-                    {loading ? 'Loading...' : 'Show Rates'}
-                </button>
-
-                <button onClick={fetchRates} disabled={loading || !backendAvailable}>
-                    {loading ? 'Fetching...' : 'Fetch Rates'}
-                </button>
-            </div>
-
-            {error && (
-                <div className="error">
-                    <strong>Error:</strong> {error}
-                    {lastFetchType && (
-                        <button
-                            className="error-retry"
-                            onClick={lastFetchType === 'table' ? initializeRates : getRates}
-                        >
-                            Try Again
+                    <div className="action-buttons">
+                        <button onClick={getRates} disabled={loading}>
+                            {loading ? 'Loading...' : 'Show Rates'}
                         </button>
-                    )}
+                        <button onClick={fetchRates} disabled={loading}>
+                            {loading ? 'Fetching...' : 'Fetch Rates'}
+                        </button>
+                    </div>
                 </div>
             )}
 
-            {rates.length > 0 ? (
-                <RatesTable rates={rates}/>
+            {loading && <div className="loading">Loading data...</div>}
+
+            {showRates && rates.length > 0 ? (
+                <RatesTable rates={rates} />
             ) : (
-                !error && <div className="empty-state">No rates found for selected period</div>
+                showRates && <div className="empty-state">No rates found for selected period</div>
             )}
 
-            {loading && <div className="loading">Loading data...</div>}
+            {error && (
+                <div className="error">
+                    {error}
+                </div>
+            )}
         </div>
     );
 };

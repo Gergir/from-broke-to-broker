@@ -1,111 +1,96 @@
-import React, { useState, useEffect } from 'react';
+import React, {useEffect, useState} from 'react';
 import DatePicker from 'react-datepicker';
-import { format } from 'date-fns';
+import {format, startOfQuarter} from 'date-fns';
 import 'react-datepicker/dist/react-datepicker.css';
 
 interface DateSelectorProps {
-  periodType: string;
-  setPeriodType: (type: string) => void;
-  dateValue: string;
-  setDateValue: (value: string) => void;
+    dateValue: string;
+    setDateValue: (value: string) => void;
+    periodType: 'day' | 'month' | 'quarter' | 'year';
+    setPeriodType: (type: 'day' | 'month' | 'quarter' | 'year') => void;
 }
 
-const CustomInput: React.FC<{ value: string; onClick: () => void }> = ({ value, onClick }) => (
-  <input
-    className="date-input"
-    value={value}
-    onClick={onClick}
-    readOnly
-    placeholder="Select date"
-  />
-);
-
 const DateSelector: React.FC<DateSelectorProps> = ({
-  periodType,
-  setPeriodType,
-  dateValue,
-  setDateValue,
+    dateValue,
+    setDateValue,
+    periodType,
+    setPeriodType
 }) => {
-  const [internalDate, setInternalDate] = useState<Date>(new Date(dateValue));
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date(dateValue));
 
-  useEffect(() => {
-    setInternalDate(new Date(dateValue));
-  }, [dateValue]);
+    useEffect(() => {
+        setSelectedDate(new Date(dateValue));
+    }, [dateValue]);
 
-  const handleDateChange = (date: Date) => {
-    let formattedDate = '';
+    const handleDateChange = (date: Date) => {
+        let formattedDate = '';
+        switch (periodType) {
+            case 'year':
+                formattedDate = format(date, 'yyyy');
+                break;
+            case 'quarter':
+                const quarterStart = startOfQuarter(date);
+                formattedDate = format(quarterStart, 'yyyy-MM-dd');
+                break;
+            case 'month':
+                formattedDate = format(date, 'yyyy-MM');
+                break;
+            case 'day':
+            default:
+                formattedDate = format(date, 'yyyy-MM-dd');
+        }
+        setDateValue(formattedDate);
+    };
+
+    return (
+        <div className="date-selector">
+            <div className="period-buttons">
+                {(['day', 'month', 'quarter', 'year'] as const).map((type) => (
+                    <button
+                        key={type}
+                        className={`period-button ${periodType === type ? 'active' : ''}`}
+                        onClick={() => setPeriodType(type)}
+                    >
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </button>
+                ))}
+            </div>
+
+            <DatePicker
+                selected={selectedDate}
+                onChange={handleDateChange}
+                inline
+                calendarClassName="custom-calendar"
+                showMonthYearPicker={periodType === 'month'}
+                showQuarterYearPicker={periodType === 'quarter'}
+                showYearPicker={periodType === 'year'}
+                dateFormat={
+                    periodType === 'year' ? 'yyyy' :
+                    periodType === 'quarter' ? 'yyyy-QQQ' :
+                    periodType === 'month' ? 'MM/yyyy' : 
+                    'dd/MM/yyyy'
+                }
+            />
+
+            <div className="selected-period">
+                Selected {periodType}: {formatSelectedPeriod(selectedDate, periodType)}
+            </div>
+        </div>
+    );
+};
+
+const formatSelectedPeriod = (date: Date, periodType: string) => {
     switch (periodType) {
-      case 'year':
-        formattedDate = format(date, 'yyyy');
-        break;
-      case 'quarter':
-        const quarter = Math.ceil((date.getMonth() + 1) / 3);
-        formattedDate = `${format(date, 'yyyy')}-Q${quarter}`;
-        break;
-      case 'month':
-        formattedDate = format(date, 'yyyy-MM');
-        break;
-      default:
-        formattedDate = format(date, 'yyyy-MM-dd');
+        case 'year':
+            return format(date, 'yyyy');
+        case 'quarter':
+            const quarter = Math.ceil((date.getMonth() + 1) / 3);
+            return `${format(date, 'yyyy')}-Q${quarter}`;
+        case 'month':
+            return format(date, 'yyyy-MM');
+        default:
+            return format(date, 'yyyy-MM-dd');
     }
-    setDateValue(formattedDate);
-  };
-
-  return (
-    <div className="date-selector">
-      <select
-        value={periodType}
-        onChange={(e) => setPeriodType(e.target.value)}
-        className="period-select"
-      >
-        <option value="day">Daily</option>
-        <option value="month">Monthly</option>
-        <option value="quarter">Quarterly</option>
-        <option value="year">Yearly</option>
-      </select>
-
-      <div className="date-picker-container">
-        {periodType === 'year' && (
-          <DatePicker
-            selected={internalDate}
-            onChange={handleDateChange}
-            dateFormat="yyyy"
-            showYearPicker
-            customInput={<CustomInput value={dateValue} onClick={() => {}} />}
-          />
-        )}
-
-        {periodType === 'quarter' && (
-          <DatePicker
-            selected={internalDate}
-            onChange={handleDateChange}
-            dateFormat="yyyy-QQQ"
-            showQuarterYearPicker
-            customInput={<CustomInput value={dateValue} onClick={() => {}} />}
-          />
-        )}
-
-        {periodType === 'month' && (
-          <DatePicker
-            selected={internalDate}
-            onChange={handleDateChange}
-            dateFormat="yyyy-MM"
-            showMonthYearPicker
-            customInput={<CustomInput value={dateValue} onClick={() => {}} />}
-          />
-        )}
-
-        {periodType === 'day' && (
-          <DatePicker
-            selected={internalDate}
-            onChange={handleDateChange}
-            dateFormat="yyyy-MM-dd"
-            customInput={<CustomInput value={dateValue} onClick={() => {}} />}
-          />
-        )}
-      </div>
-    </div>
-  );
 };
 
 export default DateSelector;
