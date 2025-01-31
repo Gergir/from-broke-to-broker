@@ -60,9 +60,7 @@ def get_new_code_rates(response: Response, code: str, rates_to_compare: set[tupl
     currency = data.get("currency")
     for rate in data.get("rates"):
         rate_date = date.fromisoformat(rate.get("effectiveDate"))
-        print(type(rate_date))
         mid = rate.get("mid")
-        print(rate_date, rates_to_compare)
         if rate_date not in dates_in_compare:
             new_rates.append(Rate(currency=currency, code=code, mid=mid, update_date=rate_date))
 

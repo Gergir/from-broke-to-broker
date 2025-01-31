@@ -187,3 +187,8 @@ fabric.properties
 
  # test database
  test.db
+
+ # frontend
+/frontend/.vscode
+/frontend/node_modules
+/frontend/.angular
