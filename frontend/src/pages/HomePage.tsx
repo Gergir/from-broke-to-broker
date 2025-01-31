@@ -157,22 +157,22 @@ const HomePage = () => {
                     break;
             }
 
-             if (selectedCurrency) {
-            await axios.post('/currencies/fetch/rates', null, {
-                params: {
-                    code: selectedCurrency,
-                    date_from: format(dateFrom, 'yyyy-MM-dd'),
-                    date_to: format(dateTo, 'yyyy-MM-dd'),
-                }
-            });
-        } else {
-            await axios.post('/currencies/fetch/tables', null, {
-                params: {
-                    date_from: format(dateFrom, 'yyyy-MM-dd'),
-                    date_to: format(dateTo, 'yyyy-MM-dd'),
-                }
-            });
-        }
+            if (selectedCurrency) {
+                await axios.post('/currencies/fetch/rates', null, {
+                    params: {
+                        code: selectedCurrency,
+                        date_from: format(dateFrom, 'yyyy-MM-dd'),
+                        date_to: format(dateTo, 'yyyy-MM-dd'),
+                    }
+                });
+            } else {
+                await axios.post('/currencies/fetch/tables', null, {
+                    params: {
+                        date_from: format(dateFrom, 'yyyy-MM-dd'),
+                        date_to: format(dateTo, 'yyyy-MM-dd'),
+                    }
+                });
+            }
 
             await getRates();
         } catch (err) {
@@ -211,19 +211,23 @@ const HomePage = () => {
                         setPeriodType={setPeriodType}
                     />
 
-                    <CurrencySelector
-                        currencies={currencies}
-                        selectedCurrency={selectedCurrency}
-                        setSelectedCurrency={setSelectedCurrency}
-                    />
+                    <div className="controls-group">
+                        <div className="currency-group">
+                            <CurrencySelector
+                                currencies={currencies}
+                                selectedCurrency={selectedCurrency}
+                                setSelectedCurrency={setSelectedCurrency}
+                            />
 
-                    <div className="action-buttons">
-                        <button onClick={getRates} disabled={loading}>
-                            {loading ? 'Loading...' : 'Show Rates'}
-                        </button>
-                        <button onClick={fetchRates} disabled={loading}>
-                            {loading ? 'Fetching...' : 'Fetch Rates'}
-                        </button>
+                            <div className="button-group">
+                                <button onClick={getRates} disabled={loading}>
+                                    {loading ? 'Loading...' : 'Show Rates'}
+                                </button>
+                                <button onClick={fetchRates} disabled={loading}>
+                                    {loading ? 'Fetching...' : 'Fetch Rates'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
