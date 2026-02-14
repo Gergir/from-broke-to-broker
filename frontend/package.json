@@ -15,11 +15,12 @@
     "react-router-dom": "^7.1.4"
   },
   "scripts": {
-    "dev": "vite --host --port 3000",
-    "build": "vite build --host --port 3000",
+    "dev": "vite --port 3000",
+    "build": "vite build",
     "preview": "vite preview",
+    "test": "jest",
     "cypress": "cypress open"
-  },
+},
   "eslintConfig": {
     "extends": [
       "react-app",
@@ -39,13 +40,17 @@
     ]
   },
   "devDependencies": {
+    "@babel/core": "^7.26.7",
     "@babel/plugin-transform-private-property-in-object": "^7.25.9",
+    "@babel/preset-env": "^7.26.7",
+    "@babel/preset-typescript": "^7.26.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@types/node": "^22.12.0",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
+    "babel-jest": "^29.7.0",
     "cypress": "^14.0.1",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
