@@ -1,4 +1,25 @@
+const year_in_future = new Date().getFullYear() + 1;
+const reset_db_endpoint = 'http://test-app:8080/test/reset-db';
+
 describe('Testing rates page', () => {
+    const resetDatabase = (() => {
+        cy.request({
+            method: 'POST',
+            url: reset_db_endpoint,
+            failOnStatusCode: true
+        }).then((response) => {
+            expect(response.status).to.eq(200);
+        });
+    });
+
+    before (() => {
+        resetDatabase();
+    });
+
+    after (() => {
+        resetDatabase();
+    });
+
     it('Should open the page', () => {
         cy.visit('/');
         cy.get('button').contains('Initialize Rates').click();
@@ -8,7 +29,7 @@ describe('Testing rates page', () => {
         cy.visit('/');
         cy.get('h1').should('contain', 'Currency Rates');
         cy.get('button').contains('Year').click();
-        cy.get('.react-datepicker__year-text').contains('2026').click();
+        cy.get('.react-datepicker__year-text').contains(year_in_future.toString()).click();
         cy.get('button').contains('Fetch Rates').click();
         cy.get('.error').contains('Date cannot be in the future.').should('exist');
         cy.get('button').contains('Show Rates').click();

@@ -1,0 +1,56 @@
+services:
+  test-app-frontend:
+    container_name: test-app-frontend
+    build:
+      context: frontend
+      dockerfile: Dockerfile.test
+    volumes:
+      - type: bind
+        source: ./frontend
+        target: /app
+      - type: volume
+        target: /app/node_modules
+    ports:
+      - "3001:3000"
+    environment:
+      - VITE_API_URL=http://test-app:8080
+    depends_on:
+      - test-app
+
+  test-app:
+    container_name: test-app
+    build:
+      context: backend
+      dockerfile: Dockerfile.test
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8001:8080"
+    env_file:
+      - backend/.env.test
+    depends_on:
+      - test-db
+
+  test-db:
+    container_name: test-db
+    image: postgres:15
+    ports:
+      - "5433:5432"
+    env_file:
+      - backend/.env.test
+    tmpfs:
+      - /var/lib/postgresql/data # Data will be cleared on restart
+
+  test-cypress:
+    image: cypress/included:15.9.0
+    container_name: test-cypress
+    depends_on:
+      - test-app-frontend
+    working_dir: /e2e
+    environment:
+      - CYPRESS_BASE_URL=http://test-app-frontend:3000 # Docker container name (docker network)
+    volumes:
+      - ./frontend/cypress:/e2e/cypress
+      - ./frontend/cypress.config.js:/e2e/cypress.config.js
+      - ./frontend/cypress/videos:/e2e/cypress/videos
+      - ./frontend/cypress/screenshots:/e2e/cypress/screenshots
