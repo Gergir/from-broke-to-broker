@@ -1,14 +1,11 @@
 services:
-  # PRODUCTION ENVIRONMENT
   app-frontend:
     container_name: app-frontend
     build:
       context: frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
-    environment:
-      - VITE_API_URL=http://app:8080
+      - "3000:80"
     depends_on:
       - app
 
@@ -17,59 +14,22 @@ services:
     build:
       context: backend
       dockerfile: Dockerfile
-    volumes:
-      - ./backend:/app
     ports:
       - "8000:8080"
     env_file:
-      - backend/.env  # Load database credentials from .env file
+      - backend/.env
     depends_on:
       - db
 
   db:
+    container_name: db
     image: postgres:15
     ports:
       - "5432:5432"
     env_file:
-      - backend/.env  # Load database credentials from .env file
+      - backend/.env
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
-
-# TEST ENVIRONMENT
-  test-app-frontend:
-    container_name: test-app-frontend
-    build:
-      context: frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - VITE_API_URL=http://test-app:8080
-    depends_on:
-      - test-app
-
-  test-app:
-    container_name: test-app
-    build:
-      context: backend
-      dockerfile: Dockerfile
-    volumes:
-      - ./backend:/app
-    ports:
-      - "8000:8080"
-    env_file:
-      - backend/.env.test  # Load database credentials from .env.test file
-    depends_on:
-      - test-db
-
-  test-db:
-    image: postgres:15
-    ports:
-      - "5433:5432"
-    env_file:
-      - backend/.env.test  # Load database credentials from .env.test file
-
 
 volumes:
   postgres_data:
