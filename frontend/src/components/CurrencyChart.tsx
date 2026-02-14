@@ -47,6 +47,7 @@ const CurrencyChart = ({rates}: Props) => {
 
     const options = {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: {
             legend: {
                 position: 'top' as const,
@@ -74,7 +75,11 @@ const CurrencyChart = ({rates}: Props) => {
         },
     };
 
-    return <Line data={data} options={options}/>;
+    return (
+        <div style={{ height: '350px', width: '100%', position: 'relative' }}>
+        <Line data={data} options={options}/>
+    </div>
+    );
 };
 
 export default CurrencyChart;
