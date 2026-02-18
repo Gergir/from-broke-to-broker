@@ -1,14 +1,16 @@
-# from-broke-to-broker
+# FromBrokeToBroker: A Fullstack Currency Exchange Rate Tracker
 
-## Overview
-
-A full-stack currency exchange rate tracker that:
+🌟Features:
 - Fetches exchange rates from the Polish National Bank API (NBP)
 - Stores historical data for analysis
 - Visualizes rate trends with interactive charts
 - Supports multiple currencies and time periods
 
-**Tech Stack:** FastAPI, React, PostgreSQL, Docker
+⚡**Tech Stack:** FastAPI, React, PostgreSQL, Docker  
+🐰**Testing Stack:** Pytest, Cypress
+
+## Preview
+![video](frontend/frontend-preview.gif)
 
 ## Build/Configuration Instructions
 
